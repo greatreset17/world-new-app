@@ -29,7 +29,8 @@ const CATEGORY_LABELS = {
     'All': '💠 すべて',
     '国際': '🌍 国際',
     'テクノロジー': '💻 テクノロジー',
-    '国内': '🇯🇵 国内'
+    '国内': '🇯🇵 国内',
+    'X (Trump)': '🇺🇸 X (Trump)'
 };
 
 // ===== Render Functions =====
