@@ -6,7 +6,7 @@
 
 import { fetchAllFeeds, NEWS_SOURCES } from './modules/rss-fetcher.js';
 import { summarizeArticles, summarize } from './modules/summarizer.js';
-import { getStoredArticles, mergeArticles, clearArticles } from './modules/storage.js';
+import { getStoredArticles, mergeArticles, clearArticles, saveArticles } from './modules/storage.js';
 import { translateArticle } from './modules/translator.js';
 
 // ===== State =====
