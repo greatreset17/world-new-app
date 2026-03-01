@@ -17,7 +17,8 @@ export const NEWS_SOURCES = [
     { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', category: 'テクノロジー', lang: 'en', icon: '💻' },
     { name: 'NHKニュース', url: 'https://www3.nhk.or.jp/rss/news/cat0.xml', category: '国内', lang: 'ja', icon: '🇯🇵' },
     { name: 'Yahoo!ニュース', url: 'https://news.yahoo.co.jp/rss/topics/top-picks.xml', category: '国内', lang: 'ja', icon: '📱' },
-    { name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: 'テクノロジー', lang: 'en', icon: '🔶' }
+    { name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: 'テクノロジー', lang: 'en', icon: '🔶' },
+    { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', category: '国際', lang: 'en', icon: '🇶' }
 ];
 
 async function fetchWithProxy(url) {
