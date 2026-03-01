@@ -15,13 +15,12 @@ export async function translateText(text, from = 'en', to = 'ja') {
     const key = `${from}|${to}:${text.substring(0, 100)}`;
     if (translateCache[key]) return translateCache[key];
 
-    // API制限(~500文字)のため長いテキストは切り詰め
     const truncated = text.length > 450 ? text.substring(0, 450) + '...' : text;
 
     try {
         const url = `${TRANSLATE_API}?q=${encodeURIComponent(truncated)}&langpair=${from}|${to}`;
         const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!resp.ok) throw new Error('Translation API error');
+        if (!resp.ok) return null; // APIエラー時はnullを返す
         const data = await resp.json();
 
         if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
@@ -29,10 +28,10 @@ export async function translateText(text, from = 'en', to = 'ja') {
             translateCache[key] = result;
             return result;
         }
-        throw new Error('Bad response status');
+        return null;
     } catch (e) {
         console.warn('[Translate] Failed:', e.message);
-        return text; // 失敗時は原文を返す
+        return null;
     }
 }
 
@@ -40,21 +39,22 @@ export async function translateText(text, from = 'en', to = 'ja') {
  * 記事オブジェクトを翻訳する
  */
 export async function translateArticle(article) {
-    if (article.lang === 'ja') return article; // 日本語なら不要
+    if (article.lang === 'ja') return article;
 
-    try {
-        const translatedTitle = await translateText(article.title, 'en', 'ja');
-        const translatedDesc = await translateText(article.description, 'en', 'ja');
+    const tTitle = await translateText(article.title, 'en', 'ja');
+    const tDesc = await translateText(article.description, 'en', 'ja');
 
+    // どちらかが成功していれば更新
+    if (tTitle || tDesc) {
         return {
             ...article,
             titleOriginal: article.title,
-            title: translatedTitle,
+            title: tTitle || article.title,
             descriptionOriginal: article.description,
-            description: translatedDesc,
-            translated: true
+            description: tDesc || article.description,
+            translated: true // 成功時のみtrueにする
         };
-    } catch (e) {
-        return article;
     }
+
+    return article; // 失敗時は元のオブジェクト（translated: falseのまま）を返す
 }

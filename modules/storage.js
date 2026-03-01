@@ -42,10 +42,24 @@ export function saveArticles(articles) {
  */
 export function mergeArticles(newArticles) {
     const existing = getStoredArticles();
-    const existingUrls = new Set(existing.map(a => a.link));
+    const articleMap = new Map();
 
-    const unique = newArticles.filter(a => !existingUrls.has(a.link));
-    const merged = [...unique, ...existing].slice(0, MAX_ARTICLES);
+    // 先に既存の記事をマップに登録
+    existing.forEach(a => articleMap.set(a.link, a));
+
+    // 新しい記事で上書きまたは追加
+    newArticles.forEach(a => {
+        const existingArticle = articleMap.get(a.link);
+        // 新規記事、または既存が未翻訳で新しいのが翻訳済みの場合は更新
+        if (!existingArticle || (a.translated && !existingArticle.translated)) {
+            articleMap.set(a.link, a);
+        }
+    });
+
+    // 日付順に並べ替えて保存
+    const merged = Array.from(articleMap.values())
+        .sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate))
+        .slice(0, MAX_ARTICLES);
 
     saveArticles(merged);
     return merged;

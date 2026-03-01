@@ -9,6 +9,7 @@ const CORS_PROXIES = [
     'https://api.allorigins.win/raw?url=',
     'https://corsproxy.io/?url=',
     'https://api.codetabs.com/v1/proxy?quest=',
+    'https://thingproxy.freeboard.io/fetch/',
 ];
 
 export const NEWS_SOURCES = [
@@ -19,7 +20,7 @@ export const NEWS_SOURCES = [
     { name: 'Yahoo!ニュース', url: 'https://news.yahoo.co.jp/rss/topics/top-picks.xml', category: '国内', lang: 'ja', icon: '📱' },
     { name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: 'テクノロジー', lang: 'en', icon: '🔶' },
     { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', category: '国際', lang: 'en', icon: '🇶' },
-    { name: 'Trump X', url: 'https://nitter.net/realDonaldTrump/rss', category: 'X (Trump)', lang: 'en', icon: '🇺🇸' }
+    { name: 'Trump X', url: 'https://nitter.poast.org/realDonaldTrump/rss', category: 'X (Trump)', lang: 'en', icon: '🇺🇸' }
 ];
 
 async function fetchWithProxy(url) {

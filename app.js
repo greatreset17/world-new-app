@@ -130,6 +130,11 @@ function applyFilter() {
 
 // ===== Processing Pipeline =====
 
+function unescapeHtml(safe) {
+    const doc = new DOMParser().parseFromString(safe, 'text/html');
+    return doc.documentElement.textContent;
+}
+
 async function processArticles(articles, onProgress) {
     const processed = [];
     const total = articles.length;
@@ -139,12 +144,18 @@ async function processArticles(articles, onProgress) {
 
         if (article.lang === 'en' && !article.translated) {
             if (onProgress) onProgress(i + 1, total, `翻訳中 (${i + 1}/${total})`);
+
+            // 翻訳実行（失敗時は元の記事が返る。translatedはfalseのまま）
             article = await translateArticle(article);
-            // API rate limit friendly
-            if (i < articles.length - 1) await new Promise(r => setTimeout(r, 300));
+
+            // API負荷軽減
+            if (i < articles.length - 1) await new Promise(r => setTimeout(r, 400));
         }
 
-        article.summary = article.summary || summarize(article.description);
+        // 要約とHTMLデコード
+        const rawSummary = article.summary || summarize(article.description);
+        article.summary = unescapeHtml(rawSummary);
+
         processed.push(article);
     }
     return processed;
