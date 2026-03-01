@@ -1,28 +1,4 @@
 {
     "version": 2,
-    "name": "world-news-app",
-    "builds": [
-        {
-            "src": "*.html",
-            "use": "@vercel/static"
-        },
-        {
-            "src": "*.css",
-            "use": "@vercel/static"
-        },
-        {
-            "src": "*.js",
-            "use": "@vercel/static"
-        },
-        {
-            "src": "modules/*.js",
-            "use": "@vercel/static"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/(.*)",
-            "dest": "/index.html"
-        }
-    ]
+    "name": "world-news-app"
 }
