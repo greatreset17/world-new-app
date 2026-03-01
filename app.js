@@ -6,7 +6,7 @@
 
 import { fetchAllFeeds, NEWS_SOURCES } from './modules/rss-fetcher.js';
 import { summarizeArticles, summarize } from './modules/summarizer.js';
-import { getStoredArticles, mergeArticles } from './modules/storage.js';
+import { getStoredArticles, mergeArticles, clearArticles } from './modules/storage.js';
 import { translateArticle } from './modules/translator.js';
 
 // ===== State =====
@@ -238,6 +238,21 @@ function getTimeAgo(dateStr) {
 
 function init() {
     allArticles = getStoredArticles();
+
+    // 以前の不具合で「英語のまま翻訳済フラグが立ってしまった」記事をクリーンアップ
+    const containsJapanese = (t) => /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(t);
+    const hasBadArticles = allArticles.some(a => a.lang === 'en' && a.translated && !containsJapanese(a.title));
+
+    if (hasBadArticles) {
+        console.log('[Init] Cleaning up bad translation states...');
+        allArticles = allArticles.map(a => {
+            if (a.lang === 'en' && a.translated && !containsJapanese(a.title)) {
+                return { ...a, translated: false };
+            }
+            return a;
+        });
+        saveArticles(allArticles);
+    }
 
     if (allArticles.length > 0) {
         renderArticles(allArticles);
