@@ -13,7 +13,6 @@ const CORS_PROXIES = [
 const NITTER_INSTANCES = [
     'https://nitter.net',
     'https://nitter.it',
-    'https://nitter.moomoo.me',
 ];
 
 export const NEWS_SOURCES = [
@@ -27,10 +26,10 @@ export const NEWS_SOURCES = [
     { name: 'Trump X', url: 'https://nitter.net/realDonaldTrump/rss', category: 'X (Trump)', lang: 'en', icon: '🇺🇸' }
 ];
 
-async function fetchWithProxy(url) {
+async function fetchWithProxy(url, timeout = 5000) {
     // Strategy 1: allorigins JSON
     try {
-        const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(6000) });
+        const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(timeout) });
         if (resp.ok) {
             const json = await resp.json();
             if (json.contents) return json.contents;
@@ -40,17 +39,17 @@ async function fetchWithProxy(url) {
     // Strategy 2: raw proxies
     for (const proxy of CORS_PROXIES) {
         try {
-            const resp = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(6000) });
+            const resp = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(timeout) });
             if (resp.ok) return await resp.text();
         } catch (e) { }
     }
     throw new Error('All proxies failed');
 }
 
-async function fetchFeedViaJson(source) {
+async function fetchFeedViaJson(source, timeout = 8000) {
     const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
     try {
-        const resp = await fetch(RSS2JSON + encodeURIComponent(source.url), { signal: AbortSignal.timeout(15000) });
+        const resp = await fetch(RSS2JSON + encodeURIComponent(source.url), { signal: AbortSignal.timeout(timeout) });
         if (!resp.ok) throw new Error('rss2json error');
         const data = await resp.json();
         if (data.status !== 'ok' || !data.items) throw new Error('rss2json bad response');
@@ -80,14 +79,15 @@ async function fetchFeed(source) {
         for (const instance of NITTER_INSTANCES) {
             const url = `${instance}/realDonaldTrump/rss`;
             try {
-                // Method 1: fetchWithProxy (XML)
-                const text = await fetchWithProxy(url);
+                // Method 1: fetchWithProxy (XML) - Very short timeout for Nitter
+                const text = await fetchWithProxy(url, 3000);
                 articles = await parseXml(text, source);
 
                 if (articles.length === 0) {
-                    // Method 2: fetchFeedViaJson (rss2json) as fallback for this instance
-                    articles = await fetchFeedViaJson({ ...source, url: url });
+                    // Method 2: fetchFeedViaJson (rss2json) - Very short timeout
+                    articles = await fetchFeedViaJson({ ...source, url: url }, 3000);
                 }
+                // ...
 
                 if (articles.length > 0) {
                     console.log(`[RSS] Successfully fetched from ${instance}`);
