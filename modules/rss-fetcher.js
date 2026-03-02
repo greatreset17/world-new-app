@@ -8,17 +8,12 @@
 const CORS_PROXIES = [
     'https://api.allorigins.win/raw?url=',
     'https://corsproxy.io/?url=',
-    'https://api.codetabs.com/v1/proxy?quest=',
-    'https://thingproxy.freeboard.io/fetch/',
 ];
 
 const NITTER_INSTANCES = [
     'https://nitter.net',
     'https://nitter.it',
     'https://nitter.moomoo.me',
-    'https://nitter.poast.org',
-    'https://nitter.perennialte.ch',
-    'https://nitter.privacy.com.de',
 ];
 
 export const NEWS_SOURCES = [
@@ -29,13 +24,13 @@ export const NEWS_SOURCES = [
     { name: 'Yahoo!ニュース', url: 'https://news.yahoo.co.jp/rss/topics/top-picks.xml', category: '国内', lang: 'ja', icon: '📱' },
     { name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: 'テクノロジー', lang: 'en', icon: '🔶' },
     { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', category: '国際', lang: 'en', icon: '🇶' },
-    { name: 'Trump X', url: 'https://nitter.poast.org/realDonaldTrump/rss', category: 'X (Trump)', lang: 'en', icon: '🇺🇸' }
+    { name: 'Trump X', url: 'https://nitter.net/realDonaldTrump/rss', category: 'X (Trump)', lang: 'en', icon: '🇺🇸' }
 ];
 
 async function fetchWithProxy(url) {
     // Strategy 1: allorigins JSON
     try {
-        const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(12000) });
+        const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(6000) });
         if (resp.ok) {
             const json = await resp.json();
             if (json.contents) return json.contents;
@@ -45,7 +40,7 @@ async function fetchWithProxy(url) {
     // Strategy 2: raw proxies
     for (const proxy of CORS_PROXIES) {
         try {
-            const resp = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(12000) });
+            const resp = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(6000) });
             if (resp.ok) return await resp.text();
         } catch (e) { }
     }
