@@ -1,8 +1,13 @@
-/**
- * app.js — メインアプリケーションロジック
- * - 各モジュールを統合してダッシュボードを構築
- * - UIレンダリング、フィルタリング、Refresh処理
- */
+console.log('[App] Script loading...');
+
+// グローバルエラーハンドラ
+window.onerror = function (msg, url, lineNo, columnNo, error) {
+    console.error('[Global Error]', msg, 'at', url, ':', lineNo, ':', columnNo, error);
+    return false;
+};
+window.onunhandledrejection = function (event) {
+    console.error('[Unhandled Rejection]', event.reason);
+};
 
 import { fetchAllFeeds, NEWS_SOURCES } from './modules/rss-fetcher.js';
 import { summarizeArticles, summarize } from './modules/summarizer.js';
@@ -64,7 +69,27 @@ function renderArticles(articles) {
     newsGrid.innerHTML = articles.map((article, index) => {
         const catClass = article.category === '国際' ? 'world' : article.category === 'テクノロジー' ? 'tech' : 'japan';
         const timeAgo = getTimeAgo(article.pubDate);
-        const translatedBadge = article.translated ? '<span style="font-size:0.6rem;background:rgba(99,102,241,0.3);color:#a5b4fc;padding:2px 6px;border-radius:4px;margin-left:6px">🌐 翻訳済</span>' : '';
+
+        // 翻訳ステータス表示の構築
+        let translationBadge = '';
+        if (article.lang === 'en') {
+            const status = article.translationStatus || (article.translated ? 'done' : 'pending');
+            if (status === 'done') {
+                translationBadge = '<span class="translation-status status-done">🌐 翻訳済</span>';
+            } else if (status === 'pending') {
+                translationBadge = `
+                    <span class="translation-status status-pending">⏳ 翻訳待機 
+                        <button class="retry-btn" onclick="window.translateArticleById('${article.link}')">今すぐ翻訳</button>
+                    </span>`;
+            } else if (status === 'failed') {
+                translationBadge = `
+                    <span class="translation-status status-failed">⚠️ 翻訳失敗 
+                        <button class="retry-btn" onclick="window.translateArticleById('${article.link}')">再試行</button>
+                    </span>`;
+            } else if (status === 'processing') {
+                translationBadge = '<span class="translation-status status-processing">🔄 翻訳中...</span>';
+            }
+        }
 
         return `
         <article class="glass-card fade-in" style="animation-delay: ${index * 0.05}s; display: flex; flex-direction: column;">
@@ -77,7 +102,7 @@ function renderArticles(articles) {
             </div>
             <div style="padding: 20px; display: flex; flex-direction: column; gap: 12px; flex: 1;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px;">
-                    <span class="source-badge">${article.sourceIcon} ${escapeHtml(article.source)}${translatedBadge}</span>
+                    <span class="source-badge">${article.sourceIcon} ${escapeHtml(article.source)}${translationBadge}</span>
                     <span style="font-size: 0.7rem; color: var(--text-secondary);">${timeAgo}</span>
                 </div>
                 <h3 style="font-size: 0.95rem; font-weight: 600; line-height: 1.4; color: var(--text-primary);">
@@ -136,30 +161,97 @@ function unescapeHtml(safe) {
 }
 
 async function processArticles(articles, onProgress) {
+    console.log(`[App] Processing ${articles.length} articles...`);
     const processed = [];
     const total = articles.length;
 
     for (let i = 0; i < articles.length; i++) {
-        let article = articles[i];
+        let article = { ...articles[i] };
 
-        if (article.lang === 'en' && !article.translated) {
+        // 翻訳の必要があるかチェック
+        if (article.lang !== 'ja' && !article.translated) {
             if (onProgress) onProgress(i + 1, total, `翻訳中 (${i + 1}/${total})`);
 
-            // 翻訳実行（失敗時は元の記事が返る。translatedはfalseのまま）
-            article = await translateArticle(article);
+            try {
+                const translatedArticle = await translateArticle(article);
+                if (translatedArticle.translated) {
+                    article = { ...translatedArticle, translationStatus: 'done' };
+                } else {
+                    article.translationStatus = 'failed';
+                }
 
-            // API負荷軽減
-            if (i < articles.length - 1) await new Promise(r => setTimeout(r, 400));
+                // API負荷軽減
+                if (i < articles.length - 1) await new Promise(r => setTimeout(r, 400));
+            } catch (error) {
+                if (error.message === 'RATE_LIMIT') {
+                    console.warn('[App] Translation rate limit hit, skipping remaining auto-translations');
+                    article.translationStatus = 'pending';
+                    // 残りの記事もpendingにする
+                    for (let j = i + 1; j < articles.length; j++) {
+                        let remaining = { ...articles[j] };
+                        remaining.translationStatus = 'pending';
+                        // 要約などは通す
+                        const rawSum = remaining.summary || summarize(remaining.description);
+                        remaining.summary = unescapeHtml(rawSum);
+                        processed.push(remaining);
+                    }
+                    // この記事自体も処理して追加
+                    const rawSum = article.summary || summarize(article.description);
+                    article.summary = unescapeHtml(rawSum);
+                    processed.push(article);
+                    break;
+                } else {
+                    article.translationStatus = 'failed';
+                }
+            }
+        } else if (article.translated) {
+            article.translationStatus = 'done';
         }
 
-        // 要約とHTMLデコード
+        // 要約とHTMLデコード（共通処理）
         const rawSummary = article.summary || summarize(article.description);
         article.summary = unescapeHtml(rawSummary);
 
         processed.push(article);
     }
+    console.log(`[App] Finished processing ${processed.length} articles.`);
     return processed;
 }
+
+/**
+ * 特定の記事を個別に翻訳する（手動トリガー用）
+ */
+async function translateArticleById(link) {
+    const idx = allArticles.findIndex(a => a.link === link);
+    if (idx === -1) return;
+
+    const article = allArticles[idx];
+    article.translationStatus = 'processing';
+    renderArticles(allArticles);
+
+    try {
+        const translated = await translateArticle(article);
+        if (translated.translated) {
+            allArticles[idx] = { ...translated, translationStatus: 'done' };
+        } else {
+            allArticles[idx].translationStatus = 'failed';
+            alert('翻訳に失敗しました。時間をおいて再度お試しください。');
+        }
+    } catch (e) {
+        allArticles[idx].translationStatus = 'failed';
+        if (e.message === 'RATE_LIMIT') {
+            alert('翻訳APIの制限に達しました。しばらく待ってから再度お試しください。');
+        } else {
+            alert('翻訳エラーが発生しました。');
+        }
+    }
+
+    saveArticles(allArticles);
+    renderArticles(allArticles);
+}
+
+// グローバルスコープに公開
+window.translateArticleById = translateArticleById;
 
 // ===== Loading State =====
 
@@ -236,7 +328,17 @@ function getTimeAgo(dateStr) {
 
 // ===== Init =====
 
+const STORAGE_VERSION = '20260301-v2'; // バージョンアップ時に更新してキャッシュクリアを促す
+
 function init() {
+    // バージョンが変わっていたら一度ストレージをクリアする
+    const currentVer = localStorage.getItem('worldnews_version');
+    if (currentVer !== STORAGE_VERSION) {
+        console.log('[Init] Version mismatch, clearing storage...');
+        clearArticles();
+        localStorage.setItem('worldnews_version', STORAGE_VERSION);
+    }
+
     allArticles = getStoredArticles();
 
     // 以前の不具合で「英語のまま翻訳済フラグが立ってしまった」記事をクリーンアップ
@@ -263,7 +365,24 @@ function init() {
 
     renderFilters();
     refreshBtn.addEventListener('click', refreshNews);
+
+    // リセットボタンの初期化
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            if (confirm('ローカルキャッシュをクリアして再読み込みしますか？')) {
+                clearArticles();
+                location.reload();
+            }
+        });
+    }
+
     if (allArticles.length === 0) refreshNews();
+    console.log('[Init] App initialized.');
 }
 
-init();
+try {
+    init();
+} catch (e) {
+    console.error('[App] Fatal error during init:', e);
+}

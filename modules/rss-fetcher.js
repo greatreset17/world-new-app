@@ -12,6 +12,15 @@ const CORS_PROXIES = [
     'https://thingproxy.freeboard.io/fetch/',
 ];
 
+const NITTER_INSTANCES = [
+    'https://nitter.net',
+    'https://nitter.it',
+    'https://nitter.moomoo.me',
+    'https://nitter.poast.org',
+    'https://nitter.perennialte.ch',
+    'https://nitter.privacy.com.de',
+];
+
 export const NEWS_SOURCES = [
     { name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', category: '国際', lang: 'en', icon: '🌍' },
     { name: 'Reuters', url: 'https://feeds.reuters.com/reuters/topNews', category: '国際', lang: 'en', icon: '🗞️' },
@@ -115,15 +124,114 @@ async function fetchFeedViaXml(source) {
 }
 
 async function fetchFeed(source) {
-    let articles;
-    if (source.lang === 'ja') {
-        articles = await fetchFeedViaJson(source);
-        if (articles.length === 0) articles = await fetchFeedViaXml(source);
+    let articles = [];
+
+    // Nitter (Trump X) の場合は複数インスタンスを試行
+    if (source.name === 'Trump X') {
+        console.log('[RSS] Fetching Trump X from Nitter instances...');
+        for (const instance of NITTER_INSTANCES) {
+            const url = `${instance}/realDonaldTrump/rss`;
+            try {
+                // Method 1: fetchWithProxy (XML)
+                const text = await fetchWithProxy(url);
+                articles = await parseXml(text, source);
+
+                if (articles.length === 0) {
+                    // Method 2: fetchFeedViaJson (rss2json) as fallback for this instance
+                    articles = await fetchFeedViaJson({ ...source, url: url });
+                }
+
+                if (articles.length > 0) {
+                    console.log(`[RSS] Successfully fetched from ${instance}`);
+
+                    // 重複（特にNitter特有の「最新なのに古い固定ツイート」）を排除
+                    // linkに「#m」が含まれるモバイル用リンクなども正規化して比較
+                    const seen = new Set();
+                    articles = articles.filter(a => {
+                        const cleanLink = a.link.split('#')[0];
+                        if (seen.has(cleanLink)) return false;
+                        seen.add(cleanLink);
+                        return true;
+                    });
+
+                    break;
+                }
+            } catch (e) {
+                console.warn(`[RSS] Nitter instance failed: ${instance} - ${e.message}`);
+            }
+        }
+        if (articles.length === 0) {
+            console.error('[RSS] All Nitter instances failed for Trump X');
+        }
     } else {
-        articles = await fetchFeedViaXml(source);
-        if (articles.length === 0) articles = await fetchFeedViaJson(source);
+        if (source.lang === 'ja') {
+            articles = await fetchFeedViaJson(source);
+            if (articles.length === 0) articles = await fetchFeedViaXml(source);
+        } else {
+            // Al Jazeera や BBCなどは強力なフォールバック
+            articles = await fetchFeedViaXml(source);
+            if (articles.length === 0) {
+                console.log(`[RSS] Falling back to JSON for ${source.name}`);
+                articles = await fetchFeedViaJson(source);
+            }
+        }
     }
     return articles;
+}
+
+/**
+ * XMLパースの共通処理
+ */
+async function parseXml(text, source) {
+    let xml = new DOMParser().parseFromString(text, 'text/xml');
+    if (xml.querySelector('parsererror')) {
+        xml = new DOMParser().parseFromString(text, 'text/html');
+    }
+
+    const items = xml.querySelectorAll('item');
+    const entries = items.length > 0 ? items : xml.querySelectorAll('entry');
+    const articles = [];
+
+    entries.forEach((item, idx) => {
+        if (idx >= 8) return;
+        const title = (item.querySelector('title')?.textContent || '').trim() || 'No Title';
+        const linkEl = item.querySelector('link');
+        const link = (linkEl?.textContent.trim() || linkEl?.getAttribute('href')) || '#';
+        const descEl = item.querySelector('description') || item.querySelector('summary');
+        const desc = descEl ? descEl.textContent.trim() : '';
+        const pubDateEl = item.querySelector('pubDate') || item.querySelector('published') || item.querySelector('updated');
+        const pubDate = pubDateEl ? pubDateEl.textContent : '';
+
+        let imageUrl = '';
+        const mc = item.querySelector('content[url]') || item.querySelector('thumbnail');
+        if (mc) imageUrl = mc.getAttribute('url') || '';
+        const enc = item.querySelector('enclosure[type^="image"]');
+        if (!imageUrl && enc) imageUrl = enc.getAttribute('url') || '';
+        if (!imageUrl) {
+            const m = desc.match(/<img[^>]+src=["']([^"']+)["']/);
+            if (m) imageUrl = m[1];
+        }
+
+        articles.push({
+            title, link,
+            description: desc.replace(/<[^>]+>/g, '').trim() || title,
+            imageUrl,
+            pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+            source: source.name, sourceIcon: source.icon,
+            category: source.category, lang: source.lang,
+            summary: '', translated: false
+        });
+    });
+    return articles;
+}
+
+async function fetchFeedViaXml(source) {
+    try {
+        const text = await fetchWithProxy(source.url);
+        return await parseXml(text, source);
+    } catch (e) {
+        return [];
+    }
 }
 
 function getDemoArticles() {

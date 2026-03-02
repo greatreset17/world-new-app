@@ -19,16 +19,28 @@ function containsJapanese(text) {
 }
 
 export async function translateText(text, from = 'en', to = 'ja') {
-    if (!text || text.trim().length === 0) return null;
-    const key = `${from}|${to}:${text.substring(0, 100)}`;
-    if (translateCache[key]) return translateCache[key];
+    // CDATA セクションの削除とHTMLタグ除去、空白の正規化
+    const cleanText = text
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 
-    const truncated = text.length > 450 ? text.substring(0, 450) + '...' : text;
+    if (!cleanText || cleanText.length === 0) return null;
+
+    // 文字数が多すぎる場合は分割せずに切り詰める（API制限対策）
+    const truncated = cleanText.length > 400 ? cleanText.substring(0, 400) + '...' : cleanText;
+
+    const key = `${from}|${to}:${truncated.substring(0, 100)}`;
+    if (translateCache[key]) return translateCache[key];
 
     try {
         const url = `${TRANSLATE_API}?q=${encodeURIComponent(truncated)}&langpair=${from}|${to}`;
-        const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!resp.ok) return null;
+        const resp = await fetch(url, { signal: AbortSignal.timeout(15000) }); // タイムアウト延長
+        if (!resp.ok) {
+            if (resp.status === 429) throw new Error('RATE_LIMIT');
+            return null;
+        }
         const data = await resp.json();
 
         if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
@@ -42,8 +54,11 @@ export async function translateText(text, from = 'en', to = 'ja') {
             translateCache[key] = result;
             return result;
         }
+
+        if (data.responseStatus === 429) throw new Error('RATE_LIMIT');
         return null;
     } catch (e) {
+        if (e.message === 'RATE_LIMIT') throw e; // app.js 側でハンドリングするため再スロー
         console.warn('[Translate] Failed:', e.message);
         return null;
     }
