@@ -75,53 +75,6 @@ async function fetchFeedViaJson(source) {
     }
 }
 
-async function fetchFeedViaXml(source) {
-    try {
-        const text = await fetchWithProxy(source.url);
-        let xml = new DOMParser().parseFromString(text, 'text/xml');
-        if (xml.querySelector('parsererror')) {
-            xml = new DOMParser().parseFromString(text, 'text/html');
-        }
-
-        const items = xml.querySelectorAll('item');
-        const entries = items.length > 0 ? items : xml.querySelectorAll('entry');
-        const articles = [];
-
-        entries.forEach((item, idx) => {
-            if (idx >= 8) return;
-            const title = (item.querySelector('title')?.textContent || '').trim() || 'No Title';
-            const linkEl = item.querySelector('link');
-            const link = (linkEl?.textContent.trim() || linkEl?.getAttribute('href')) || '#';
-            const descEl = item.querySelector('description') || item.querySelector('summary');
-            const desc = descEl ? descEl.textContent.trim() : '';
-            const pubDateEl = item.querySelector('pubDate') || item.querySelector('published') || item.querySelector('updated');
-            const pubDate = pubDateEl ? pubDateEl.textContent : '';
-
-            let imageUrl = '';
-            const mc = item.querySelector('content[url]') || item.querySelector('thumbnail');
-            if (mc) imageUrl = mc.getAttribute('url') || '';
-            const enc = item.querySelector('enclosure[type^="image"]');
-            if (!imageUrl && enc) imageUrl = enc.getAttribute('url') || '';
-            if (!imageUrl) {
-                const m = desc.match(/<img[^>]+src=["']([^"']+)["']/);
-                if (m) imageUrl = m[1];
-            }
-
-            articles.push({
-                title, link,
-                description: desc.replace(/<[^>]+>/g, '').trim() || title,
-                imageUrl,
-                pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
-                source: source.name, sourceIcon: source.icon,
-                category: source.category, lang: source.lang,
-                summary: '', translated: false
-            });
-        });
-        return articles;
-    } catch (e) {
-        return [];
-    }
-}
 
 async function fetchFeed(source) {
     let articles = [];
